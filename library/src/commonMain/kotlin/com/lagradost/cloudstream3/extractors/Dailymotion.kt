@@ -26,6 +26,7 @@ open class Dailymotion : ExtractorApi() {
     private val baseUrl = "https://www.dailymotion.com"
 
     private val videoIdRegex = "^[kx][a-zA-Z0-9]+$".toRegex()
+    private val emptySubtitlesRegex = "\"data\"\\s*:\\s*\\[\\s*]".toRegex()
 
     override suspend fun getUrl(
         url: String,
@@ -38,7 +39,9 @@ open class Dailymotion : ExtractorApi() {
         val metadataUrl = "$baseUrl/player/metadata/video/$id"
 
         val response = app.get(metadataUrl, referer = embedUrl).text
-        val meta = parseJson<Metadata>(response)
+        // When a video has no subtitles the API sends `"data":[]` instead of an object,
+        // which breaks both kotlinx.serialization and Jackson. Treat it as no subtitles.
+        val meta = parseJson<Metadata>(response.replace(emptySubtitlesRegex, "\"data\":null"))
         meta.qualities?.get("auto")?.forEach { quality ->
             val videoUrl = quality.url
             if (!videoUrl.isNullOrEmpty() && videoUrl.contains(".m3u8")) {
