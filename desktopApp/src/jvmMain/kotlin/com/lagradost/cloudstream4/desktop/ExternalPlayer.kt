@@ -46,7 +46,7 @@ object ExternalPlayer {
     }
 
     /** Downloads subtitles locally: players can't send the provider's headers for them. */
-    private suspend fun downloadSubtitles(subs: List<SubtitleFile>): List<File> {
+    suspend fun downloadSubtitles(subs: List<SubtitleFile>): List<File> {
         val dir = File(AppDirs.cache, "subtitles").apply {
             mkdirs()
             listFiles()?.forEach { it.delete() }

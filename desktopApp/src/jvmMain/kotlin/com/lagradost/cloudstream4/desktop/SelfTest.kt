@@ -49,7 +49,12 @@ object SelfTest {
             val links = mutableListOf<ExtractorLink>()
             api.loadLinks(data.first().second, false, { println("   sub: ${it.lang} ${it.url}") }) { links += it }
             println("[selftest] ${links.size} link(s)")
-            links.take(5).forEach { println("   - ${it.name} q=${it.quality} ${it.type} ${it.url}") }
+            links.take(5).forEach { println("   - ${it.name} q=${it.quality} ${it.type} audio=${it.audioTracks.size} ${it.url.take(100)}") }
+            System.getenv("CSP_SELFTEST_DUMP")?.let { path ->
+                java.io.File(path).writeText(links.joinToString("\n") { l ->
+                    (listOf("LINK ${l.name} ${l.quality} ${l.url}") + l.audioTracks.map { "AUDIO ${it.url}" }).joinToString("\n")
+                })
+            }
             check(links.isNotEmpty()) { "no links" }
             println("[selftest] OK")
             0

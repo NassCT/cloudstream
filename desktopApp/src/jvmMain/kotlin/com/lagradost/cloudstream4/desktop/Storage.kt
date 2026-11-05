@@ -55,6 +55,8 @@ data class DesktopSettings(
     val mpvPath: String? = null,
     val lastProvider: String? = null,
     val searchProviders: Set<String>? = null,
+    val useBuiltInPlayer: Boolean = true,
+    val autoSelectSubtitles: Boolean = true,
 )
 
 object SettingsStore {

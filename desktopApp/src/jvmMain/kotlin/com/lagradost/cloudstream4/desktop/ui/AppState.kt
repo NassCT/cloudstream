@@ -6,16 +6,29 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.TvType
+
+data class PlayItem(val title: String, val data: String)
 
 sealed interface Screen {
     data object Home : Screen
     data object Search : Screen
+    data object Library : Screen
     data object Extensions : Screen
     data object Settings : Screen
     data class Details(val apiName: String, val url: String, val title: String) : Screen
+    data class Player(
+        val apiName: String,
+        val showUrl: String,
+        val showName: String,
+        val posterUrl: String?,
+        val items: List<PlayItem>,
+        val index: Int,
+    ) : Screen
 }
 
 /** Result of one provider row / call, kept while navigating. */
@@ -29,6 +42,8 @@ fun Throwable.userMessage(): String {
     val root = generateSequence(this) { it.cause }.last()
     return when (root) {
         is NotImplementedError -> "Not supported by this provider"
+        is java.net.UnknownHostException -> "No connection (${root.message})"
+        is java.net.SocketTimeoutException -> "The site took too long to answer"
         else -> root.message?.take(300) ?: root::class.simpleName ?: "Error"
     }
 }
@@ -44,8 +59,17 @@ class HomeState {
 class SearchState {
     var query by mutableStateOf("")
     var lastQuery by mutableStateOf("")
+    var typeFilter by mutableStateOf<Set<TvType>>(emptySet())
     val results = mutableStateMapOf<String, Loadable<List<SearchResponse>>>()
 }
+
+/** Window-level actions the screens need (fullscreen for the player). */
+interface WindowController {
+    val isFullscreen: Boolean
+    fun setFullscreen(value: Boolean)
+}
+
+val LocalWindowController = staticCompositionLocalOf<WindowController> { error("No window") }
 
 @Stable
 class AppState {
@@ -68,6 +92,11 @@ class AppState {
 
     fun open(screen: Screen) {
         backStack.add(screen)
+    }
+
+    /** Replaces the top screen (e.g. next episode in the player). */
+    fun replace(screen: Screen) {
+        backStack[backStack.lastIndex] = screen
     }
 
     fun back() {

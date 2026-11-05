@@ -1,21 +1,25 @@
 package com.lagradost.cloudstream4.desktop.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,18 +27,28 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lagradost.cloudstream3.MainAPI
+import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream4.desktop.PluginLoader
+import com.lagradost.cloudstream4.desktop.res.Res
+import com.lagradost.cloudstream4.desktop.res.ic_baseline_clear_24
+import com.lagradost.cloudstream4.desktop.res.search_icon
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -42,6 +56,19 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
 private var searchJob: Job? = null
+
+/** Same groups as the Android search filter chips. */
+private val typeFilters: List<Pair<String, Set<TvType>>> = listOf(
+    "All" to emptySet(),
+    "Movies" to setOf(TvType.Movie, TvType.AnimeMovie, TvType.Torrent),
+    "TV Series" to setOf(TvType.TvSeries),
+    "Anime" to setOf(TvType.Anime, TvType.AnimeMovie, TvType.OVA),
+    "Asian" to setOf(TvType.AsianDrama),
+    "Cartoons" to setOf(TvType.Cartoon),
+    "Documentaries" to setOf(TvType.Documentary),
+    "Livestreams" to setOf(TvType.Live),
+    "Others" to setOf(TvType.Others),
+)
 
 @Composable
 fun SearchScreen(app: AppState) {
@@ -51,20 +78,23 @@ fun SearchScreen(app: AppState) {
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 
+    fun providersFor(types: Set<TvType>) =
+        PluginLoader.providers.value.filter { p -> types.isEmpty() || p.supportedTypes.any { it in types } }
+    val filteredProviders = providersFor(state.typeFilter)
+
     fun runSearch() {
         val query = state.query.trim()
         if (query.isEmpty()) return
         searchJob?.cancel()
+        val filteredProviders = providersFor(state.typeFilter)
         state.lastQuery = query
         state.results.clear()
-        providers.forEach { state.results[it.name] = Loadable.Loading }
+        filteredProviders.forEach { state.results[it.name] = Loadable.Loading }
         searchJob = scope.launch {
-            providers.forEach { api ->
+            filteredProviders.forEach { api ->
                 launch {
                     val result = runCatching {
-                        withTimeout(60_000) {
-                            withContext(Dispatchers.IO) { searchProvider(api, query) }
-                        }
+                        withTimeout(60_000) { withContext(Dispatchers.IO) { searchProvider(api, query) } }
                     }
                     state.results[api.name] = result.fold({ Loadable.Ok(it) }, { Loadable.Error(it.userMessage()) })
                 }
@@ -73,42 +103,57 @@ fun SearchScreen(app: AppState) {
     }
 
     Column(Modifier.fillMaxSize()) {
+        // search_background: rounded gray box with the search icon
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            Modifier.padding(start = 20.dp, end = 20.dp, top = 18.dp).fillMaxWidth().height(50.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(25.dp))
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedTextField(
-                value = state.query,
-                onValueChange = { state.query = it },
-                placeholder = { Text("Search movies, series, anime…") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { runSearch() }),
-                modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(focus)
-                    .onPreviewKeyEvent {
-                        if (it.type == KeyEventType.KeyDown && (it.key == Key.Enter || it.key == Key.NumPadEnter)) {
-                            runSearch(); true
-                        } else false
+            CsIcon(Res.drawable.search_icon, size = 24.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(12.dp))
+            Box(Modifier.weight(1f)) {
+                if (state.query.isEmpty()) Text("Search…", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 17.sp)
+                BasicTextField(
+                    value = state.query,
+                    onValueChange = { state.query = it },
+                    singleLine = true,
+                    textStyle = TextStyle(color = MaterialTheme.colorScheme.onBackground, fontSize = 17.sp),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { runSearch() }),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent {
+                        if (it.type == KeyEventType.KeyDown && (it.key == Key.Enter || it.key == Key.NumPadEnter)) { runSearch(); true } else false
                     }
-            )
-            Button(onClick = { runSearch() }, modifier = Modifier.padding(top = 8.dp)) { Text("Search") }
+                )
+            }
+            if (state.query.isNotEmpty()) RoundIconButton(Res.drawable.ic_baseline_clear_24, size = 34.dp, iconSize = 20.dp, tint = MaterialTheme.colorScheme.onSurfaceVariant) {
+                state.query = ""
+            }
+        }
+
+        Row(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+            TagRow {
+                typeFilters.forEach { (label, types) ->
+                    Tag(label, selected = state.typeFilter == types) {
+                        state.typeFilter = types
+                        if (state.lastQuery.isNotEmpty()) runSearch()
+                    }
+                }
+            }
         }
 
         if (providers.isEmpty()) {
             MessageBox("No extensions installed", "Install extensions to be able to search.") {
-                Button(onClick = { app.navigateRoot(Screen.Extensions) }) { Text("Open Extensions") }
+                CsWhiteButton("Open extensions") { app.navigateRoot(Screen.Extensions) }
             }
             return@Column
         }
-
         if (state.lastQuery.isEmpty()) {
-            MessageBox("Search across ${providers.size} provider(s)", providers.joinToString(", ") { it.name })
+            MessageBox("Search across ${filteredProviders.size} provider(s)", filteredProviders.joinToString(", ") { it.name })
             return@Column
         }
 
-        // Providers with results first, then loading ones, then empty / failed
         val ordered = state.results.entries.sortedBy { (_, v) ->
             when (v) {
                 is Loadable.Ok -> if (v.value.isNotEmpty()) 0 else 3
@@ -116,31 +161,33 @@ fun SearchScreen(app: AppState) {
                 is Loadable.Error -> 2
             }
         }
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 8.dp, bottom = 24.dp)) {
             items(ordered, key = { it.key }) { (name, loadable) ->
                 val api = providers.firstOrNull { it.name == name }
                 when (loadable) {
-                    Loadable.Loading -> Column(Modifier.padding(horizontal = 24.dp, vertical = 12.dp)) {
-                        Text(name, style = MaterialTheme.typography.titleMedium)
-                        LinearProgressIndicator(Modifier.width(200.dp).padding(top = 8.dp))
+                    Loadable.Loading -> Column(Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
+                        Text(name, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        LinearProgressIndicator(Modifier.width(200.dp).padding(top = 10.dp), color = MaterialTheme.colorScheme.primary)
                     }
                     is Loadable.Error -> Text(
-                        "$name: ${loadable.message}",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
+                        "$name: ${loadable.message}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
-                    is Loadable.Ok -> if (loadable.value.isEmpty()) Text(
-                        "$name: no results",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
-                    ) else PosterRow("$name (${loadable.value.size})", loadable.value) { app.openDetails(api, it) }
+                    is Loadable.Ok -> {
+                        val shown = loadable.value.filterByType(state.typeFilter)
+                        if (shown.isEmpty()) Text(
+                            "$name: no results", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) else PosterRow(name, shown) { app.openDetails(api, it) }
+                    }
                 }
             }
         }
     }
 }
+
+private fun List<SearchResponse>.filterByType(types: Set<TvType>) =
+    if (types.isEmpty()) this else filter { it.type == null || it.type in types }
 
 private suspend fun searchProvider(api: MainAPI, query: String) =
     api.search(query, 1)?.items.orEmpty()
