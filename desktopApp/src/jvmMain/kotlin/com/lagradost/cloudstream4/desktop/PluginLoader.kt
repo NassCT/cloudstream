@@ -68,7 +68,7 @@ object PluginLoader {
     }
 
     /** Bump when the conversion changes so cached jars are rebuilt. */
-    private const val CONVERTER_VERSION = 2
+    private const val CONVERTER_VERSION = 3
 
     private fun jarFor(cs3: File) = File(cs3.parentFile, "${cs3.nameWithoutExtension}.v$CONVERTER_VERSION.jar")
 
@@ -100,6 +100,9 @@ object PluginLoader {
                         // otherwise calls into the Kotlin stdlib and the library no longer link
                         .dontSanitizeNames(true)
                         .doTranslate(fs.getPath("/"))
+                }
+                BytecodeCompat.apply(fs).takeIf { it > 0 }?.let {
+                    android.util.Log.i(TAG, "${cs3.name}: adapted $it call(s) to the current API")
                 }
                 zip.getEntry("manifest.json")?.let { m ->
                     Files.write(fs.getPath("/manifest.json"), zip.getInputStream(m).use { it.readBytes() })
@@ -210,10 +213,14 @@ object PluginLoader {
                     )
                 }.getOrNull()
             }.toList()
-        if (orphans.isEmpty()) return
-        android.util.Log.i(TAG, "Recovered ${orphans.size} extension(s) missing from the settings")
+        // Same extension installed from another repository: already known under its other file
+        val missing = orphans
+            .filter { o -> SettingsStore.value.installedPlugins.none { it.internalName == o.internalName } }
+            .distinctBy { it.internalName }
+        if (missing.isEmpty()) return
+        android.util.Log.i(TAG, "Recovered ${missing.size} extension(s) missing from the settings")
         SettingsStore.update { s ->
-            s.copy(installedPlugins = s.installedPlugins + orphans.filter { o -> s.installedPlugins.none { it.internalName == o.internalName } })
+            s.copy(installedPlugins = s.installedPlugins + missing.filter { o -> s.installedPlugins.none { it.internalName == o.internalName } })
         }
     }
 

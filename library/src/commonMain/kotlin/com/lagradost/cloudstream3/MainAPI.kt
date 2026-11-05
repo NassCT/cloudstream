@@ -2562,6 +2562,20 @@ constructor(
     var date: Long? = null,
     var runTime: Int? = null,
 ) {
+    /** Binary compatibility: older extensions call the constructor that took `rating: Int?` and no runTime. */
+    @Suppress("DEPRECATION_ERROR")
+    @Deprecated("Binary compatibility with old extensions", level = DeprecationLevel.HIDDEN)
+    constructor(
+        data: String,
+        name: String? = null,
+        season: Int? = null,
+        episode: Int? = null,
+        posterUrl: String? = null,
+        rating: Int? = null,
+        description: String? = null,
+        date: Long? = null,
+    ) : this(data, name, season, episode, posterUrl, rating?.let { Score.from(it, 100) }, description, date, null)
+
     @Deprecated(
         "`rating` is the old scoring system, use score instead",
         replaceWith = ReplaceWith("score"),

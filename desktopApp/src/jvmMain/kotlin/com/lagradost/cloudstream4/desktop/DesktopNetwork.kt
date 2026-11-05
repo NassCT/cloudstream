@@ -47,6 +47,30 @@ object DesktopNetwork {
     fun install(choice: DnsChoice = SettingsStore.value.dns) {
         runCatching { app.baseClient = buildClient(choice) }
             .onFailure { System.err.println("Network setup failed, using defaults: $it") }
+        installImageLoader()
+    }
+
+    /**
+     * Posters go through the same client as the extensions (DNS over HTTPS, trusted roots), with a browser
+     * user agent: sites blocked by the ISP or behind Cloudflare also host their posters there.
+     */
+    private fun installImageLoader() {
+        val userAgent = Interceptor { chain ->
+            val request = chain.request()
+            chain.proceed(
+                if (request.header("User-Agent") != null) request
+                else request.newBuilder().header("User-Agent", com.lagradost.cloudstream3.USER_AGENT).build()
+            )
+        }
+        coil3.SingletonImageLoader.setUnsafe { context ->
+            coil3.ImageLoader.Builder(context)
+                .components {
+                    add(coil3.network.okhttp.OkHttpNetworkFetcherFactory(callFactory = {
+                        app.baseClient.newBuilder().addInterceptor(userAgent).build()
+                    }))
+                }
+                .build()
+        }
     }
 
     fun buildClient(choice: DnsChoice): OkHttpClient {

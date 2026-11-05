@@ -102,6 +102,17 @@ fun SearchScreen(app: AppState) {
         }
     }
 
+    // Dev helper: CSP_SEARCH="<query>" runs that search when the screen opens (with CSP_SCREEN=Search)
+    LaunchedEffect(providers.size) {
+        val q = System.getenv("CSP_SEARCH")
+        if (!q.isNullOrBlank() && state.lastQuery.isEmpty() && providers.isNotEmpty()) {
+            // Restarted on every new provider: runs once extensions stop loading for 5 s
+            kotlinx.coroutines.delay(5_000)
+            state.query = q
+            runSearch()
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
         // search_background: rounded gray box with the search icon
         Row(
@@ -162,7 +173,9 @@ fun SearchScreen(app: AppState) {
             }
         }
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 8.dp, bottom = 24.dp)) {
-            items(ordered, key = { it.key }) { (name, loadable) ->
+            // No item keys on purpose: with keys the list keeps the first visible row (often an error line)
+            // in place while result rows get sorted above it, so results ended up scrolled out of view
+            items(ordered) { (name, loadable) ->
                 val api = providers.firstOrNull { it.name == name }
                 when (loadable) {
                     Loadable.Loading -> Column(Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {

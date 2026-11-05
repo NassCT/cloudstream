@@ -253,6 +253,40 @@ fun ExtensionsScreen(app: AppState) {
                         }
                     }
                 }
+
+                // Installed extensions that no saved repository lists (repository removed, or recovered
+                // from disk): still shown so they can be seen and removed
+                val orphans = settings.installedPlugins
+                    .filter { i -> all.none { it.plugin.internalName == i.internalName } }
+                    .filter { filter.isBlank() || it.name.contains(filter, true) }
+                    .sortedBy { it.name.lowercase() }
+                if (orphans.isNotEmpty()) item {
+                    Text(
+                        "Installed, not in your repositories",
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp, start = 4.dp)
+                    )
+                }
+                items(orphans, key = { "orphan_" + it.internalName }) { inst ->
+                    val state = loadStates[inst.internalName]
+                    ListCard {
+                        RemoteImage(inst.iconUrl?.replace("%size%", "128"), null, null, Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(inst.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text("v${inst.version}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            when (state) {
+                                is PluginLoader.LoadState.Failed -> Text("Failed to load: ${state.error}", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                                is PluginLoader.LoadState.Loaded -> Text(
+                                    if (state.providers.isEmpty()) "Extractors only" else state.providers.joinToString(", "),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp
+                                )
+                                null -> {}
+                            }
+                        }
+                        if (busy[inst.internalName] == true) CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.dp)
+                        else RoundIconButton(Res.drawable.ic_baseline_delete_outline_24, tint = MaterialTheme.colorScheme.onBackground) { uninstall(inst.internalName) }
+                    }
+                }
             }
         }
     }

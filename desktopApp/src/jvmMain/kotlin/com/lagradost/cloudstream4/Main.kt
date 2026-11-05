@@ -46,6 +46,7 @@ import com.lagradost.cloudstream4.desktop.AppLog
 import com.lagradost.cloudstream4.desktop.DesktopNetwork
 import com.lagradost.cloudstream4.desktop.PluginLoader
 import com.lagradost.cloudstream4.desktop.SelfTest
+import com.lagradost.cloudstream4.desktop.SingleInstance
 import com.lagradost.cloudstream4.desktop.UnixSocketDirFix
 import com.lagradost.cloudstream4.desktop.res.Res
 import com.lagradost.cloudstream4.desktop.res.extension_24px
@@ -77,12 +78,18 @@ import kotlin.system.exitProcess
 import com.lagradost.cloudstream4.generated.resources.Res as SharedRes
 
 fun main(args: Array<String>) {
+    val selfTest = "--selftest" in args || System.getenv("CSP_SELFTEST") in setOf("1", "installed", "links")
+    // Checked before anything touches the data folder (log, settings)
+    if (!selfTest && !SingleInstance.acquire()) {
+        javax.swing.JOptionPane.showMessageDialog(
+            null, "CloudStream is already open.", "CloudStream", javax.swing.JOptionPane.INFORMATION_MESSAGE
+        )
+        exitProcess(0)
+    }
     AppLog.install()
     UnixSocketDirFix.apply()
     DesktopNetwork.install()
-    if ("--selftest" in args || System.getenv("CSP_SELFTEST") in setOf("1", "installed", "links")) {
-        exitProcess(SelfTest.run())
-    }
+    if (selfTest) exitProcess(SelfTest.run())
     application {
         val windowState = rememberWindowState(size = DpSize(1360.dp, 860.dp), position = WindowPosition.PlatformDefault)
         val app = remember { AppState() }
@@ -141,6 +148,13 @@ private fun App(app: AppState) {
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
+        // Dev helper: CSP_SCREEN=Search|Library|Extensions|Settings opens that screen at start-up
+        when (System.getenv("CSP_SCREEN")?.lowercase()) {
+            "search" -> app.navigateRoot(Screen.Search)
+            "library" -> app.navigateRoot(Screen.Library)
+            "extensions" -> app.navigateRoot(Screen.Extensions)
+            "settings" -> app.navigateRoot(Screen.Settings)
+        }
         PluginLoader.loadAllInstalled()
         // Dev helper: CSP_OPEN="<provider name>|<url>" opens that title at start-up
         System.getenv("CSP_OPEN")?.split("|", limit = 2)?.takeIf { it.size == 2 }?.let { (api, url) ->

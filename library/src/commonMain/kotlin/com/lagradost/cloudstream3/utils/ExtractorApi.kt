@@ -738,6 +738,20 @@ constructor(
         return videoSize
     }
 
+    /** Binary compatibility: the primary constructor before `audioTracks` was added, still used by many extensions. */
+    @Suppress("DEPRECATION")
+    @Deprecated("Binary compatibility with old extensions", level = DeprecationLevel.HIDDEN)
+    constructor(
+        source: String,
+        name: String,
+        url: String,
+        referer: String,
+        quality: Int,
+        headers: Map<String, String>,
+        extractorData: String?,
+        type: ExtractorLinkType,
+    ) : this(source, name, url, referer, quality, headers, extractorData, type, emptyList())
+
     @JsonIgnore
     fun getAllHeaders(): Map<String, String> {
         if (referer.isBlank()) {

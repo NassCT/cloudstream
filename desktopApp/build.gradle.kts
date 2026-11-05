@@ -31,13 +31,15 @@ kotlin {
             implementation(libs.jackson.module.kotlin)
             implementation(libs.nicehttp)
             implementation(libs.jsoup) // HTML plots/descriptions to text
-            implementation(libs.coil.network.ktor3)
-            implementation(libs.ktor.client.java)
+            implementation(libs.coil.network.okhttp)
             implementation(libs.newpipeextractor) // YouTube extension and trailers
             implementation(libs.vlcj) // Built-in player (libVLC 3)
 
             // Converts Android extensions (.cs3 -> classes.dex) into JVM bytecode
             implementation(libs.dex2jar.translator)
+
+            // Bundled by the Android app and used directly by some extensions (e.g. HiAnime)
+            implementation("com.google.code.gson:gson:2.11.0")
         }
     }
 }
