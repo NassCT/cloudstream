@@ -67,13 +67,19 @@ object PluginLoader {
             .sortedBy { it.name.lowercase() }
     }
 
-    private fun jarFor(cs3: File) = File(cs3.parentFile, cs3.nameWithoutExtension + ".jar")
+    /** Bump when the conversion changes so cached jars are rebuilt. */
+    private const val CONVERTER_VERSION = 2
+
+    private fun jarFor(cs3: File) = File(cs3.parentFile, "${cs3.nameWithoutExtension}.v$CONVERTER_VERSION.jar")
 
     /** dex -> jar. The manifest is copied into the jar so the class loader can read it too. */
     private fun convert(cs3: File): File {
         val jar = jarFor(cs3)
         if (jar.exists() && jar.lastModified() >= cs3.lastModified() && jar.length() > 0) return jar
         jar.delete()
+        // Jars from older converter versions
+        cs3.parentFile.listFiles { f -> f.name.startsWith(cs3.nameWithoutExtension + ".") && f.extension == "jar" }
+            ?.forEach { it.delete() }
 
         ZipFile(cs3).use { zip ->
             val dexEntries = zip.entries().asSequence()
@@ -90,6 +96,9 @@ object PluginLoader {
                         .topoLogicalSort()
                         .skipExceptions(false)
                         .reUseReg(false)
+                        // Keep Kotlin's mangled names (e.g. `constructor-impl`) instead of turning '-' into '_',
+                        // otherwise calls into the Kotlin stdlib and the library no longer link
+                        .dontSanitizeNames(true)
                         .doTranslate(fs.getPath("/"))
                 }
                 zip.getEntry("manifest.json")?.let { m ->
@@ -125,6 +134,8 @@ object PluginLoader {
                 android.util.Log.i(TAG, "Loaded $internalName -> ${providersOf(plugin)}")
                 LoadState.Loaded(providersOf(plugin))
             } catch (t: Throwable) {
+                // Drop what it registered before failing, otherwise broken providers show up in search
+                removeRegistrations(key)
                 runCatching { loader.close() }
                 throw t
             }
@@ -144,15 +155,19 @@ object PluginLoader {
             APIHolder.allProviders.filter { it.sourcePlugin == plugin.instance.filename }.map { it.name }
         }
 
+    private fun removeRegistrations(key: String) {
+        APIHolder.apis.filter { it.sourcePlugin == key }.forEach { APIHolder.removePluginMapping(it) }
+        APIHolder.allProviders.withLock { APIHolder.allProviders.removeAll { it.sourcePlugin == key } }
+        extractorApis.withLock { extractorApis.removeAll { it.sourcePlugin == key } }
+    }
+
     @Synchronized
     fun unload(cs3: File, internalName: String) {
         val key = cs3.absolutePath
         val plugin = loaded.remove(key)
         if (plugin != null) {
             runCatching { plugin.instance.beforeUnload() }
-            APIHolder.apis.filter { it.sourcePlugin == key }.forEach { APIHolder.removePluginMapping(it) }
-            APIHolder.allProviders.withLock { APIHolder.allProviders.removeAll { it.sourcePlugin == key } }
-            extractorApis.withLock { extractorApis.removeAll { it.sourcePlugin == key } }
+            removeRegistrations(key)
             runCatching { plugin.classLoader.close() }
         }
         _states.update { it - internalName }
@@ -161,6 +176,7 @@ object PluginLoader {
 
     /** Loads every installed and enabled plugin. */
     suspend fun loadAllInstalled() = withContext(Dispatchers.IO) {
+        recoverOrphans()
         for (p in SettingsStore.value.installedPlugins) {
             if (!p.enabled) continue
             val file = File(p.filePath)
@@ -171,6 +187,34 @@ object PluginLoader {
             load(file, p.internalName)
         }
         refreshProviders()
+    }
+
+    /**
+     * Extensions downloaded but missing from the settings (e.g. the settings couldn't be saved)
+     * are added back, so they aren't silently lost.
+     */
+    private fun recoverOrphans() {
+        val known = SettingsStore.value.installedPlugins.map { File(it.filePath).absolutePath }.toSet()
+        val orphans = AppDirs.plugins.walk().maxDepth(2)
+            .filter { it.isFile && it.extension == "cs3" && it.absolutePath !in known }
+            .mapNotNull { file ->
+                runCatching {
+                    val manifest = readManifest(file)
+                    InstalledPlugin(
+                        internalName = file.nameWithoutExtension,
+                        name = manifest.name ?: file.nameWithoutExtension,
+                        version = manifest.version ?: 0,
+                        url = "",
+                        repositoryUrl = "",
+                        filePath = file.absolutePath,
+                    )
+                }.getOrNull()
+            }.toList()
+        if (orphans.isEmpty()) return
+        android.util.Log.i(TAG, "Recovered ${orphans.size} extension(s) missing from the settings")
+        SettingsStore.update { s ->
+            s.copy(installedPlugins = s.installedPlugins + orphans.filter { o -> s.installedPlugins.none { it.internalName == o.internalName } })
+        }
     }
 
     private fun fileNameFor(plugin: OnlinePlugin): String =

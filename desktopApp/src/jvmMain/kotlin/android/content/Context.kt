@@ -32,6 +32,7 @@ object DesktopContextHolder {
     @JvmStatic
     var dataDir: File = File(System.getProperty("user.home"), ".cloudstreamplus")
 
+    /** An AppCompatActivity because many extensions cast the context they get to one. */
     @JvmStatic
-    val instance: Context by lazy { Context() }
+    val instance: androidx.appcompat.app.AppCompatActivity by lazy { androidx.appcompat.app.AppCompatActivity() }
 }

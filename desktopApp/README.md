@@ -18,12 +18,13 @@ Like the Android app it hosts no content: everything comes from the extensions y
   (fit/fill/zoom), speed, sources, subtitles (auto-selected in your system language), next episode, auto-next,
   resume, fullscreen, automatic fallback to the next source when one fails or stalls, separate audio tracks.
 - **External player** button (mpv or VLC) for sources that need custom HTTP headers.
+- **DNS over HTTPS** (Settings > Network, on by default): gets around sites blocked by the internet provider's DNS.
 
 Keyboard in the player: `Space`/`K` play/pause, `←`/`→` ±10 s, `↑`/`↓` volume, `F`/`F11` or double-click
 fullscreen, `M` mute, `N` next episode, `Esc` back.
 
 Not supported yet: downloads, torrents, accounts sync (AniList/MAL/Simkl), extension settings screens,
-extensions that rely on Android APIs beyond `Context`, `SharedPreferences`, `Log` and `Base64`.
+Cloudflare challenges (they need Android's WebView), extensions that rely on Android UI or account APIs.
 
 ## How Android extensions run on Windows
 
@@ -33,7 +34,12 @@ A `.cs3` file is a zip with `manifest.json` and `classes.dex` (Android bytecode)
 2. The jar is loaded in its own `URLClassLoader` whose parent provides the CloudStream `library` API.
 3. Extensions extending the cross-platform `BasePlugin` work directly. Those extending the Android-only
    `Plugin` class get a desktop version of it (`com.lagradost.cloudstream3.plugins.Plugin`) plus small stubs
-   of `android.content.Context`, `SharedPreferences`, `android.util.Log` and `android.util.Base64`.
+   of `android.content.Context`, `SharedPreferences`, `android.util.Log` and `android.util.Base64`, and
+   desktop versions of the app classes extensions commonly use (`DataStore`, `AcraApplication`/`CloudStreamApp`,
+   `CloudflareKiller`, `MainActivity` events, `PluginManager`).
+
+dex2jar runs with `dontSanitizeNames`, so Kotlin's mangled names (`constructor-impl`, ...) keep their `-` and still
+link against the Kotlin stdlib and the library.
 
 All data lives in `%APPDATA%\CloudStreamPlus` (settings, extensions, history, cache).
 
@@ -61,6 +67,12 @@ Headless end-to-end check (installs an extension from the official repository, s
 CSP_SELFTEST=1 CSP_SELFTEST_PLUGIN=InternetArchiveProvider CSP_SELFTEST_QUERY=nosferatu ./gradlew :desktopApp:run
 ```
 
+Check every installed extension (load + search):
+
+```bash
+CSP_SELFTEST=installed CSP_SELFTEST_QUERY=avatar ./gradlew :desktopApp:run
+```
+
 Developer helpers: `CSP_OPEN="<provider>|<url>"` opens a title at start-up, `CSP_VLC_VERBOSE=1` prints libVLC logs.
 
 ### Troubleshooting
@@ -73,3 +85,5 @@ $env:JAVA_TOOL_OPTIONS='-Djdk.net.unixdomain.tmpdir=C:\tmp\uds'
 ```
 
 The app itself detects this and picks a working folder on its own.
+
+The installed app writes a log to `%APPDATA%\CloudStreamPlus\logspp.log` (Settings > Log file).

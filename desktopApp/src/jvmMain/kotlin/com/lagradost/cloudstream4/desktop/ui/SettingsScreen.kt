@@ -31,6 +31,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lagradost.cloudstream4.desktop.AppDirs
+import com.lagradost.cloudstream4.desktop.DesktopNetwork
+import com.lagradost.cloudstream4.desktop.DnsChoice
 import com.lagradost.cloudstream4.desktop.ExternalPlayer
 import com.lagradost.cloudstream4.desktop.PlayerChoice
 import com.lagradost.cloudstream4.desktop.SettingsStore
@@ -111,9 +113,33 @@ fun SettingsScreen() {
                 )
             }
 
+            Group("Network")
+            Text(
+                "DNS over HTTPS gets around sites blocked by your internet provider's DNS.",
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)
+            )
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(12.dp)) {
+                DnsChoice.entries.forEach { choice ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = settings.dns == choice,
+                            onClick = {
+                                SettingsStore.update { it.copy(dns = choice) }
+                                DesktopNetwork.install(choice)
+                            },
+                            colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
+                        )
+                        Text(choice.label)
+                    }
+                }
+            }
+
             Group("General")
             SettingRow(Res.drawable.ic_baseline_folder_open_24, "Data folder", AppDirs.root.absolutePath, onClick = {
                 runCatching { Desktop.getDesktop().open(AppDirs.root) }
+            })
+            SettingRow(Res.drawable.ic_baseline_folder_open_24, "Log file", "Open it to report a problem", onClick = {
+                runCatching { Desktop.getDesktop().open(com.lagradost.cloudstream4.desktop.AppLog.file) }
             })
 
             Group("About")

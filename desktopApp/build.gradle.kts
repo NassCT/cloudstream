@@ -81,7 +81,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Exe, TargetFormat.Msi, TargetFormat.Dmg, TargetFormat.Deb)
             packageName = "CloudStreamPlus"
-            packageVersion = "1.0.0"
+            packageVersion = "1.0.1"
             description = "CloudStream for Windows"
             vendor = "CloudStream Plus"
             // Modules needed at runtime by the bundled JRE (networking, scripting, crypto, ...)

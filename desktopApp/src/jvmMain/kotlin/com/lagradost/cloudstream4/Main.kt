@@ -42,6 +42,8 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.lagradost.cloudstream4.compose.LocalFocusOutlineDefault
+import com.lagradost.cloudstream4.desktop.AppLog
+import com.lagradost.cloudstream4.desktop.DesktopNetwork
 import com.lagradost.cloudstream4.desktop.PluginLoader
 import com.lagradost.cloudstream4.desktop.SelfTest
 import com.lagradost.cloudstream4.desktop.UnixSocketDirFix
@@ -75,8 +77,10 @@ import kotlin.system.exitProcess
 import com.lagradost.cloudstream4.generated.resources.Res as SharedRes
 
 fun main(args: Array<String>) {
+    AppLog.install()
     UnixSocketDirFix.apply()
-    if ("--selftest" in args || System.getenv("CSP_SELFTEST") == "1") {
+    DesktopNetwork.install()
+    if ("--selftest" in args || System.getenv("CSP_SELFTEST") in setOf("1", "installed")) {
         exitProcess(SelfTest.run())
     }
     application {

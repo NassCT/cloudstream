@@ -22,7 +22,32 @@ fun LoadResponse.playableData(): List<Pair<String, String>> = when (this) {
  * CSP_SELFTEST_QUERY). Installs a plugin from the official repo, searches, loads and lists links.
  */
 object SelfTest {
-    fun run(): Int = runBlocking {
+    fun run(): Int = if (System.getenv("CSP_SELFTEST") == "installed") runInstalled() else runOne()
+
+    /**
+     * `CSP_SELFTEST=installed`: loads every installed extension and searches each provider
+     * (CSP_SELFTEST_QUERY, default "batman"), to spot extensions that don't work on desktop.
+     */
+    private fun runInstalled(): Int = runBlocking {
+        val query = System.getenv("CSP_SELFTEST_QUERY") ?: "batman"
+        PluginLoader.loadAllInstalled()
+        PluginLoader.states.value.toSortedMap().forEach { (name, state) -> println("[load] $name: $state") }
+        val failures = PluginLoader.states.value.count { it.value is PluginLoader.LoadState.Failed }
+        PluginLoader.providers.value.forEach { api ->
+            val result = runCatching {
+                kotlinx.coroutines.withTimeout(30_000) { api.search(query, 1)?.items.orEmpty() }
+            }
+            result.onSuccess { println("[search] ${api.name}: ${it.size} results ${it.firstOrNull()?.name ?: ""}") }
+                .onFailure {
+                    val root = generateSequence(it) { e -> e.cause }.last()
+                    println("[search] ${api.name}: ERROR ${root::class.simpleName}: ${root.message}")
+                }
+        }
+        println("[selftest] $failures extension(s) failed to load")
+        if (failures == 0) 0 else 1
+    }
+
+    private fun runOne(): Int = runBlocking {
         val pluginName = System.getenv("CSP_SELFTEST_PLUGIN") ?: "InternetArchiveProvider"
         val query = System.getenv("CSP_SELFTEST_QUERY") ?: "nosferatu"
         try {

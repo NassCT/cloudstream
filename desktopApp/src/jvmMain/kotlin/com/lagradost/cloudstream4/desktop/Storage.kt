@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /** Where CloudStream Plus keeps its data: %APPDATA%\CloudStreamPlus on Windows. */
 object AppDirs {
@@ -57,6 +59,7 @@ data class DesktopSettings(
     val searchProviders: Set<String>? = null,
     val useBuiltInPlayer: Boolean = true,
     val autoSelectSubtitles: Boolean = true,
+    val dns: DnsChoice = DnsChoice.Auto,
 )
 
 object SettingsStore {
@@ -79,13 +82,16 @@ object SettingsStore {
 
     @Synchronized
     private fun save(settings: DesktopSettings) {
-        runCatching {
-            val tmp = File(AppDirs.settingsFile.parentFile, "settings.json.tmp")
-            desktopMapper.writeValue(tmp, settings)
-            if (!tmp.renameTo(AppDirs.settingsFile)) {
-                tmp.copyTo(AppDirs.settingsFile, overwrite = true)
-                tmp.delete()
+        val tmp = File(AppDirs.settingsFile.parentFile, "settings.json.tmp")
+        // Retries: antivirus or backup tools can briefly lock the file on Windows
+        for (attempt in 1..5) {
+            val result = runCatching {
+                desktopMapper.writeValue(tmp, settings)
+                Files.move(tmp.toPath(), AppDirs.settingsFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
             }
-        }.onFailure { it.printStackTrace() }
+            if (result.isSuccess) return
+            System.err.println("Saving settings failed (attempt $attempt): ${result.exceptionOrNull()}")
+            if (attempt == 5) result.exceptionOrNull()?.printStackTrace() else Thread.sleep(200L * attempt)
+        }
     }
 }
