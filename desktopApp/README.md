@@ -1,20 +1,28 @@
-# CloudStream Plus — Windows desktop app
+# CloudStream for Windows (desktopApp)
 
 An unofficial Windows (and Linux/macOS) build of CloudStream, built with Compose Multiplatform on top of
-the shared `library` module. Like the Android app it hosts no content: everything comes from the
-extensions you install.
+the shared `library` module. It reuses the Android app's look: same icons, colors, Product Sans font,
+navigation rail, home hero banner, poster cards, result page and player controls.
+Like the Android app it hosts no content: everything comes from the extensions you install.
 
-## What works
+## Features
 
-- **Extensions**: add repositories (URL, `cloudstreamrepo://` link or short code), install, update and uninstall extensions.
-  Regular Android `.cs3` extensions are loaded as-is (see below).
-- **Home**: the home page sections of any installed provider.
-- **Search** across every installed provider in parallel.
-- **Details**: poster, plot, tags, cast, seasons, episodes, dub/sub for anime, recommendations.
-- **Playback** in an external player: **mpv** (recommended, forwards every HTTP header) or **VLC**
-  (forwards referer and user agent only). Subtitles found by the extension are downloaded and passed to the player.
+- **Extensions**: add repositories (URL, `cloudstreamrepo://` link or short code), install, update and
+  uninstall extensions. Regular Android `.cs3` extensions are loaded as-is (see below).
+- **Home**: hero banner with the provider's highlights, provider picker, *Continue watching*, home sections.
+- **Search** across every installed provider in parallel, with type filters (movies, series, anime, ...).
+- **Details**: backdrop, plot, cast, tags, Play / Resume, bookmarks, seasons, dub/sub, episodes with progress,
+  recommendations.
+- **Library**: bookmarked titles.
+- **Built-in player** (libVLC, bundled in the installer): CloudStream-style controls, ±10 s, seek bar, resize
+  (fit/fill/zoom), speed, sources, subtitles (auto-selected in your system language), next episode, auto-next,
+  resume, fullscreen, automatic fallback to the next source when one fails or stalls, separate audio tracks.
+- **External player** button (mpv or VLC) for sources that need custom HTTP headers.
 
-Not supported yet: built-in player, downloads, torrents, accounts sync (AniList/MAL/Simkl), extension settings screens,
+Keyboard in the player: `Space`/`K` play/pause, `←`/`→` ±10 s, `↑`/`↓` volume, `F`/`F11` or double-click
+fullscreen, `M` mute, `N` next episode, `Esc` back.
+
+Not supported yet: downloads, torrents, accounts sync (AniList/MAL/Simkl), extension settings screens,
 extensions that rely on Android APIs beyond `Context`, `SharedPreferences`, `Log` and `Base64`.
 
 ## How Android extensions run on Windows
@@ -27,12 +35,13 @@ A `.cs3` file is a zip with `manifest.json` and `classes.dex` (Android bytecode)
    `Plugin` class get a desktop version of it (`com.lagradost.cloudstream3.plugins.Plugin`) plus small stubs
    of `android.content.Context`, `SharedPreferences`, `android.util.Log` and `android.util.Base64`.
 
-All data lives in `%APPDATA%\CloudStreamPlus` (settings, extensions, cache).
+All data lives in `%APPDATA%\CloudStreamPlus` (settings, extensions, history, cache).
 
 ## Build and run
 
-Requires JDK 17+ (21 recommended). The Android SDK is needed because the shared modules also target Android
-(create `local.properties` with `sdk.dir=...`).
+Requires JDK 17+ (21 recommended) and the Android SDK, because the shared modules also target Android
+(create `local.properties` with `sdk.dir=...`). Install VLC 3 to get libVLC bundled into the app
+(`VLC_DIR` can point to another VLC folder); without it the app falls back to an external player.
 
 ```bash
 ./gradlew :desktopApp:run
@@ -52,11 +61,15 @@ Headless end-to-end check (installs an extension from the official repository, s
 CSP_SELFTEST=1 CSP_SELFTEST_PLUGIN=InternetArchiveProvider CSP_SELFTEST_QUERY=nosferatu ./gradlew :desktopApp:run
 ```
 
+Developer helpers: `CSP_OPEN="<provider>|<url>"` opens a title at start-up, `CSP_VLC_VERBOSE=1` prints libVLC logs.
+
 ### Troubleshooting
 
-`java.io.IOException: Unable to establish loopback connection` when starting Gradle on Windows comes from the JDK's
-AF_UNIX sockets in the temp folder. Point them to a simple folder:
+`java.io.IOException: Unable to establish loopback connection` when starting **Gradle** on Windows comes from the
+JDK's AF_UNIX sockets: on some machines the temp folder refuses them. Point them to another folder:
 
 ```powershell
 $env:JAVA_TOOL_OPTIONS='-Djdk.net.unixdomain.tmpdir=C:\tmp\uds'
 ```
+
+The app itself detects this and picks a working folder on its own.

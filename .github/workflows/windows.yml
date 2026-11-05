@@ -30,6 +30,11 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
+      # libVLC (LGPL) is copied into the app by the prepareVlc task for the built-in player
+      - name: Install VLC (bundled libVLC)
+        shell: pwsh
+        run: choco install vlc -y --no-progress
+
       - name: Build installer (exe + msi) and portable app
         shell: pwsh
         run: ./gradlew.bat :desktopApp:packageExe :desktopApp:packageMsi :desktopApp:createDistributable --console=plain
