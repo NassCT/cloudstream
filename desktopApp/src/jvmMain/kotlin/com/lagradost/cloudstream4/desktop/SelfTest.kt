@@ -6,6 +6,7 @@ import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MovieLoadResponse
 import com.lagradost.cloudstream3.TvSeriesLoadResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 
 /** Content "data" strings to pass to loadLinks, for any kind of LoadResponse. */
@@ -22,7 +23,51 @@ fun LoadResponse.playableData(): List<Pair<String, String>> = when (this) {
  * CSP_SELFTEST_QUERY). Installs a plugin from the official repo, searches, loads and lists links.
  */
 object SelfTest {
-    fun run(): Int = if (System.getenv("CSP_SELFTEST") == "installed") runInstalled() else runOne()
+    fun run(): Int = when (System.getenv("CSP_SELFTEST")) {
+        "installed" -> runInstalled()
+        "links" -> runLinks()
+        else -> runOne()
+    }
+
+    /**
+     * `CSP_SELFTEST=links`: for each installed provider (or CSP_SELFTEST_PROVIDERS, comma separated),
+     * search CSP_SELFTEST_QUERY, open the first result and collect its video links, like pressing Play.
+     */
+    private fun runLinks(): Int = runBlocking {
+        val query = System.getenv("CSP_SELFTEST_QUERY") ?: "dune"
+        val only = System.getenv("CSP_SELFTEST_PROVIDERS")?.split(",")?.map { it.trim().lowercase() }?.toSet()
+        PluginLoader.loadAllInstalled()
+        val apis = PluginLoader.providers.value.filter { only == null || it.name.lowercase() in only }
+        val rows = kotlinx.coroutines.coroutineScope {
+            val scope = this
+            apis.map { api ->
+                scope.async(kotlinx.coroutines.Dispatchers.IO) {
+                    val log = StringBuilder()
+                    val outcome = runCatching {
+                        kotlinx.coroutines.withTimeout(90_000) {
+                            val first = api.search(query, 1)?.items.orEmpty().firstOrNull() ?: return@withTimeout "no search results"
+                            val load = api.load(first.url) ?: return@withTimeout "load returned null (${first.name})"
+                            val data = load.playableData().firstOrNull() ?: return@withTimeout "nothing playable in ${load.name} (${load.type})"
+                            val links = java.util.Collections.synchronizedList(mutableListOf<ExtractorLink>())
+                            var subs = 0
+                            val ok = runCatching { api.loadLinks(data.second, false, { subs++ }) { links += it } }
+                            ok.exceptionOrNull()?.let { log.append(" loadLinks threw ${it::class.simpleName}: ${it.message?.take(120)}") }
+                            links.take(4).forEach { log.append("\n      - ${it.source} q=${it.quality} ${it.type} ${it.url.take(90)}") }
+                            "${load.name} / ${data.first}: ${links.size} link(s), $subs sub(s)"
+                        }
+                    }.getOrElse {
+                        val root = generateSequence(it) { e -> e.cause }.last()
+                        "ERROR ${root::class.simpleName}: ${root.message?.take(150)}"
+                    }
+                    "[links] ${api.name}: $outcome$log".also { println(it) }
+                }
+            }
+        }
+        // Some sites never answer and blocking calls ignore cancellation: give up after 4 minutes
+        val done = kotlinx.coroutines.withTimeoutOrNull(240_000) { rows.map { it.await() } }
+        if (done == null) println("[links] stopped waiting: " + apis.zip(rows).filter { !it.second.isCompleted }.joinToString { it.first.name } + " never answered")
+        kotlin.system.exitProcess(0)
+    }
 
     /**
      * `CSP_SELFTEST=installed`: loads every installed extension and searches each provider

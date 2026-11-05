@@ -80,7 +80,7 @@ fun main(args: Array<String>) {
     AppLog.install()
     UnixSocketDirFix.apply()
     DesktopNetwork.install()
-    if ("--selftest" in args || System.getenv("CSP_SELFTEST") in setOf("1", "installed")) {
+    if ("--selftest" in args || System.getenv("CSP_SELFTEST") in setOf("1", "installed", "links")) {
         exitProcess(SelfTest.run())
     }
     application {

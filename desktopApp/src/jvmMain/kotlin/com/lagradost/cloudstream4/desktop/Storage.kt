@@ -75,9 +75,15 @@ object SettingsStore {
         DesktopSettings()
     }
 
+    /**
+     * Change + save under one lock. Without it, two updates at the same time (e.g. installing several
+     * extensions in a row) could write an older snapshot last and silently drop the newer change on disk.
+     */
+    @Synchronized
     fun update(transform: (DesktopSettings) -> DesktopSettings) {
-        _state.update(transform)
-        save(_state.value)
+        val next = transform(_state.value)
+        _state.value = next
+        save(next)
     }
 
     @Synchronized
