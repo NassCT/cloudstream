@@ -16,6 +16,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Publishes with the upstream project's GitHub App, so it only works there (skipped on forks)
+    if: github.repository == 'recloudstream/cloudstream'
     steps:
       - name: Generate access token
         id: generate_token
