@@ -86,4 +86,4 @@ $env:JAVA_TOOL_OPTIONS='-Djdk.net.unixdomain.tmpdir=C:\tmp\uds'
 
 The app itself detects this and picks a working folder on its own.
 
-The installed app writes a log to `%APPDATA%\CloudStreamPlus\logspp.log` (Settings > Log file).
+The installed app writes a log to `%APPDATA%CloudStreamPlusogspp.log` (Settings > Log file).
